@@ -20,7 +20,7 @@ import org.json.JSONObject;
 import java.util.Iterator;
 
 public class PushPlugin extends CordovaPlugin {
-    private static final String COM_ADOBE_PHONEGAP_PUSH = "com.adobe.phonegap.push";
+    public static final String COM_ADOBE_PHONEGAP_PUSH = "com.adobe.phonegap.push";
 
     public static final String LOG_TAG = "PushPlugin";
 
@@ -33,6 +33,7 @@ public class PushPlugin extends CordovaPlugin {
     private static String gSenderID;
     private static Bundle gCachedExtras = null;
     private static boolean gForeground = false;
+    private static String gCallback = null;
 
     /**
      * Gets the application context from cordova's main activity.
@@ -88,6 +89,7 @@ public class PushPlugin extends CordovaPlugin {
                 }
                 editor.putBoolean("sound", jo.optBoolean("sound", true));
                 editor.putBoolean("vibrate", jo.optBoolean("vibrate", true));
+                editor.putBoolean("clearNotifications", jo.optBoolean("clearNotifications", true));
                 editor.commit();
             }
 
@@ -119,6 +121,12 @@ public class PushPlugin extends CordovaPlugin {
         pushContext.sendPluginResult(pluginResult);
     }
 
+    public static void sendError(String message) {
+        PluginResult pluginResult = new PluginResult(PluginResult.Status.ERROR, message);
+        pluginResult.setKeepCallback(true);
+        pushContext.sendPluginResult(pluginResult);
+    }
+
     /*
      * Sends the pushbundle extras to the client application.
      * If the client application isn't currently active, it is cached for later processing.
@@ -144,8 +152,12 @@ public class PushPlugin extends CordovaPlugin {
     public void onPause(boolean multitasking) {
         super.onPause(multitasking);
         gForeground = false;
-        final NotificationManager notificationManager = (NotificationManager) cordova.getActivity().getSystemService(Context.NOTIFICATION_SERVICE);
-        notificationManager.cancelAll();
+
+        SharedPreferences prefs = getApplicationContext().getSharedPreferences(PushPlugin.COM_ADOBE_PHONEGAP_PUSH, Context.MODE_PRIVATE);
+        if (prefs.getBoolean("clearNotifications", true)) {
+            final NotificationManager notificationManager = (NotificationManager) cordova.getActivity().getSystemService(Context.NOTIFICATION_SERVICE);
+            notificationManager.cancelAll();
+        }
     }
 
     @Override
@@ -194,6 +206,8 @@ public class PushPlugin extends CordovaPlugin {
                     json.put("sound", value);
                 } else if (key.equals("image")) {
                     json.put("image", value);
+                } else if (key.equals("callback")) {
+                    json.put("callback", value);
                 }
                 else if ( value instanceof String ) {
                     String strValue = (String)value;

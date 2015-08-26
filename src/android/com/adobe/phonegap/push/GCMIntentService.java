@@ -6,6 +6,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Random;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -26,14 +27,30 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
+import android.text.Html;
 
 import com.google.android.gcm.GCMBaseIntentService;
+
+import java.util.ArrayList;
 
 @SuppressLint("NewApi")
 public class GCMIntentService extends GCMBaseIntentService {
 
     private static final String LOG_TAG = "PushPlugin_GCMIntentService";
-    
+    private static final String STYLE_INBOX = "inbox";
+    private static final String STYLE_PICTURE = "picture";
+    private static final String STYLE_TEXT = "text";
+    private static ArrayList<String> messageList = new ArrayList();
+
+    public void setNotification(String message){
+
+        if(message == ""){
+            messageList.clear();
+        }else{
+            messageList.add(message);
+        }
+    }
+
     public GCMIntentService() {
         super("GCMIntentService");
     }
@@ -41,7 +58,7 @@ public class GCMIntentService extends GCMBaseIntentService {
     @Override
     public void onRegistered(Context context, String regId) {
 
-        Log.v(LOG_TAG, "onRegistered: "+ regId);
+        Log.v(LOG_TAG, "onRegistered: " + regId);
 
         try {
             JSONObject json = new JSONObject().put("registrationId", regId);
@@ -97,7 +114,7 @@ public class GCMIntentService extends GCMBaseIntentService {
 
         int requestCode = new Random().nextInt();
         PendingIntent contentIntent = PendingIntent.getActivity(this, requestCode, notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-        
+
         NotificationCompat.Builder mBuilder =
             new NotificationCompat.Builder(context)
                 .setWhen(System.currentTimeMillis())
@@ -105,8 +122,8 @@ public class GCMIntentService extends GCMBaseIntentService {
                 .setTicker(extras.getString("title"))
                 .setContentIntent(contentIntent)
                 .setAutoCancel(true);
-        
-        SharedPreferences prefs = context.getSharedPreferences("com.adobe.phonegap.push", Context.MODE_PRIVATE);
+
+        SharedPreferences prefs = context.getSharedPreferences(PushPlugin.COM_ADOBE_PHONEGAP_PUSH, Context.MODE_PRIVATE);
         String localIcon = prefs.getString("icon", null);
         String localIconColor = prefs.getString("iconColor", null);
         boolean soundOption = prefs.getBoolean("sound", true);
@@ -136,9 +153,9 @@ public class GCMIntentService extends GCMBaseIntentService {
          * Notification Icon
          *
          * Sets the small-icon of the notification.
-         * 
+         *
          * - checks the plugin options for `icon` key
-         * - if none, uses the application icon 
+         * - if none, uses the application icon
          *
          * The icon value must be a string that maps to a drawable resource.
          * If no resource is found, falls
@@ -176,20 +193,39 @@ public class GCMIntentService extends GCMBaseIntentService {
          * Notification count
          */
         setNotificationCount(extras, mBuilder);
-        
-        int notId = 0;
-        
-        try {
-            notId = Integer.parseInt(extras.getString("notId"));
-        }
-        catch(NumberFormatException e) {
-            Log.e(LOG_TAG, "Number format exception - Error parsing Notification ID: " + e.getMessage());
-        }
-        catch(Exception e) {
-            Log.e(LOG_TAG, "Number format exception - Error parsing Notification ID" + e.getMessage());
-        }
-        
+
+        /*
+         * Notication add actions
+         */
+        createActions(extras, mBuilder, resources, packageName);
+
+        int notId = parseInt("notId", extras);
+
         mNotificationManager.notify((String) appName, notId, mBuilder.build());
+    }
+
+    private void createActions(Bundle extras, NotificationCompat.Builder mBuilder, Resources resources, String packageName) {
+        Log.d(LOG_TAG, "create actions");
+        String actions = extras.getString("actions");
+        if (actions != null) {
+            try {
+                JSONArray actionsArray = new JSONArray(actions);
+                for (int i=0; i < actionsArray.length(); i++) {
+                    Log.d(LOG_TAG, "adding action");
+                    JSONObject action = actionsArray.getJSONObject(i);
+                    Log.d(LOG_TAG, "adding callback = " + action.getString("callback"));
+                    Intent intent = new Intent(this, PushHandlerActivity.class);
+                    intent.putExtra("callback", action.getString("callback"));
+                    intent.putExtra("pushBundle", extras);
+                    PendingIntent pIntent = PendingIntent.getActivity(this, i, intent, 0);
+
+                    mBuilder.addAction(resources.getIdentifier(action.getString("icon"), "drawable", packageName),
+                            action.getString("title"), pIntent);
+                }
+            } catch(JSONException e) {
+                // nope
+            }
+        }
     }
 
     private void setNotificationCount(Bundle extras, NotificationCompat.Builder mBuilder) {
@@ -203,23 +239,64 @@ public class GCMIntentService extends GCMBaseIntentService {
     }
 
     private void setNotificationMessage(Bundle extras, NotificationCompat.Builder mBuilder) {
-        NotificationCompat.BigTextStyle bigText = new NotificationCompat.BigTextStyle();
-
         String message = getMessageText(extras);
-        if (message != null) {
+
+        String style = extras.getString("style", STYLE_TEXT);
+        if(STYLE_INBOX.equals(style)) {
+            setNotification(message);
+
             mBuilder.setContentText(message);
 
-            bigText.bigText(message);
-            bigText.setBigContentTitle(extras.getString("title"));
+            Integer sizeList = messageList.size();
+            if (sizeList > 1) {
+                String sizeListMessage = sizeList.toString();
+                String stacking = sizeList + " more";
+                if (extras.getString("summaryText") != null) {
+                    stacking = extras.getString("summaryText");
+                    stacking = stacking.replace("%n%", sizeListMessage);
+                }
+                NotificationCompat.InboxStyle notificationInbox = new NotificationCompat.InboxStyle()
+                        .setBigContentTitle(extras.getString("title"))
+                        .setSummaryText(stacking);
 
-            String summaryText = extras.getString("summaryText");
-            if (summaryText != null) {
-                bigText.setSummaryText(summaryText);
+                for (int i = messageList.size() - 1; i >= 0; i--) {
+                    notificationInbox.addLine(Html.fromHtml(messageList.get(i)));
+                }
+
+                mBuilder.setStyle(notificationInbox);
             }
+        } else if (STYLE_PICTURE.equals(style)) {
+            setNotification("");
 
-            mBuilder.setStyle(bigText);
+            NotificationCompat.BigPictureStyle bigPicture = new NotificationCompat.BigPictureStyle();
+            bigPicture.bigPicture(getBitmapFromURL(extras.getString("picture")));
+            bigPicture.setBigContentTitle(extras.getString("title"));
+            bigPicture.setSummaryText(extras.getString("summaryText"));
+
+            mBuilder.setContentTitle(extras.getString("title"));
+            mBuilder.setContentText(message);
+
+            mBuilder.setStyle(bigPicture);
         } else {
-            mBuilder.setContentText("<missing message content>");
+            setNotification("");
+
+            NotificationCompat.BigTextStyle bigText = new NotificationCompat.BigTextStyle();
+
+            if (message != null) {
+                mBuilder.setContentText(Html.fromHtml(message));
+
+                bigText.bigText(message);
+                bigText.setBigContentTitle(extras.getString("title"));
+
+                String summaryText = extras.getString("summaryText");
+                if (summaryText != null) {
+                    bigText.setSummaryText(summaryText);
+                }
+
+                mBuilder.setStyle(bigText);
+            } else {
+                mBuilder.setContentText("<missing message content>");
+            }
         }
     }
 
@@ -299,14 +376,14 @@ public class GCMIntentService extends GCMBaseIntentService {
             try {
                 iconColor = Color.parseColor(color);
             } catch (IllegalArgumentException e) {
-                Log.e(LOG_TAG, "couldnt parse color from android options");
+                Log.e(LOG_TAG, "couldn't parse color from android options");
             }
         }
         else if (localIconColor != null) {
             try {
                 iconColor = Color.parseColor(localIconColor);
             } catch (IllegalArgumentException e) {
-                Log.e(LOG_TAG, "couldnt parse color from android options");
+                Log.e(LOG_TAG, "couldn't parse color from android options");
             }
         }
         if (iconColor != 0) {
@@ -328,15 +405,34 @@ public class GCMIntentService extends GCMBaseIntentService {
             return null;
         }
     }
-    
+
     private static String getAppName(Context context) {
         CharSequence appName =  context.getPackageManager().getApplicationLabel(context.getApplicationInfo());
         return (String)appName;
     }
-    
+
     @Override
     public void onError(Context context, String errorId) {
         Log.e(LOG_TAG, "onError - errorId: " + errorId);
+        // if we are in the foreground, just send the error
+        if (PushPlugin.isInForeground()) {
+            PushPlugin.sendError(errorId);
+        }
     }
 
+    private int parseInt(String value, Bundle extras) {
+        int retval = 0;
+
+        try {
+            retval = Integer.parseInt(extras.getString(value));
+        }
+        catch(NumberFormatException e) {
+            Log.e(LOG_TAG, "Number format exception - Error parsing " + value + ": " + e.getMessage());
+        }
+        catch(Exception e) {
+            Log.e(LOG_TAG, "Number format exception - Error parsing " + value + ": " + e.getMessage());
+        }
+
+        return retval;
+    }
 }

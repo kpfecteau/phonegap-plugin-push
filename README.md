@@ -59,6 +59,7 @@ Parameter | Description
 `options.android.iconColor` | `String` Optional. Sets the background color of the small icon. [Supported Formats](http://developer.android.com/reference/android/graphics/Color.html#parseColor(java.lang.String))
 `options.android.sound` | `Boolean` Optional. If `true` it plays the sound specified in the push data or the default system sound. Default is `true`.
 `options.android.vibrate` | `Boolean` Optional. If `true` the device vibrates on receipt of notification. Default is `true`.
+`options.android.clearNotifications` | `Boolean` Optional. If `true` the app clears all pending notifications when it is closed. Default is `true`.
 `options.ios` | `JSON Object` iOS specific initialization options.
 `options.windows` | `JSON Object` Windows specific initialization options.
 
@@ -312,6 +313,79 @@ and:
 ```
 
 You will only see both "Push number 1" and "Push number 2" in the shade.
+
+### Inbox Stacking ###
+
+A better alternative to stacking your notifications is to use the inbox style to have up to 8 lines of notification text in a single notification. If you send the following JSON from GCM you will see:
+
+```javascript
+{
+	title:"My Title", 
+	message: "My first message", 
+	style: "inbox",
+	summaryText: "There are %n% notifications"
+}
+```
+
+It will produce a normal looking notification:
+
+![2015-08-25 14 11 27](https://cloud.githubusercontent.com/assets/353180/9468840/c9c5d43a-4b11-11e5-814f-8dc995f47830.png)
+
+But, if you follow it up with subsequent notifications like:
+
+```javascript
+{
+	title:"My Title", 
+	message: "My second message", 
+	style: "inbox",
+	summaryText: "There are %n% notifications"
+}
+```
+
+You will get an inbox view so you can display multiple notifications in a single panel.
+
+![2015-08-25 14 01 35](https://cloud.githubusercontent.com/assets/353180/9468727/2d658bee-4b11-11e5-90fa-248d54c8f3f6.png)
+
+If you use `%n%` in the `summaryText` of the JSON coming down from GCM it will be replaced by the number of messages that are currently in the queue.
+
+### Action Buttons
+
+Your notification can include action buttons. If you wish to include an icon along with the button name they must be placed in the `res/drawable` directory of your Android project. Then you can send the following JSON from GCM:
+
+```javascript
+{
+	title:"AUX Scrum", 
+	message: "Scrum: Daily touchbase @ 10am Please be on time so we can cover everything on the agenda.", 
+	actions: [
+		{ icon: "emailGuests", title: "EMAIL GUESTS", callback: "app.emailGuests"},
+		{ icon: "snooze", title: "SNOOZE", callback: "app.snooze"},
+	]
+}
+```
+
+This will produce the following notification in your tray:
+
+![action_combo](https://cloud.githubusercontent.com/assets/353180/9313435/02554d2a-44f1-11e5-8cd9-0aadd1e02b18.png)
+
+If your users clicks on the main body of the notification your app will be opened. However if they click on either of the action buttons the app will open (or start) and the specified JavaScript callback will be executed. In this case it is `app.emailGuests` and `app.snooze` respectively.
+
+### Picture Messages
+
+Perhaps you want to include a large picture in the notification that you are sending to your users. Luckily you can do that too buy sending the following JSON from GCM.
+
+```javascript
+{
+	title:"Big Picture", 
+	message: "This is my big picture message", 
+	style: "picture",
+    picture: "http://36.media.tumblr.com/c066cc2238103856c9ac506faa6f3bc2/tumblr_nmstmqtuo81tssmyno1_1280.jpg",
+	summaryText: "The internet is built on cat pictures"
+}
+```
+
+This will produce the following notification in your tray:
+
+![2015-08-25 16 08 00](https://cloud.githubusercontent.com/assets/353180/9472260/3655fa7a-4b22-11e5-8d87-20528112de16.png)
 
 ## iOS Behaviour
 
