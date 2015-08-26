@@ -66,7 +66,11 @@ public class PushPlugin extends CordovaPlugin {
 
                 Log.v(LOG_TAG, "execute: senderID=" + gSenderID);
 
-                GCMRegistrar.register(getApplicationContext(), gSenderID);
+                // https://github.com/t-nonque/phonegap-plugin-push/commit/c54439b721741c77b7b4de38af690ee6a25d88a4
+                boolean registered = GCMRegistrar.isRegistered(getApplicationContext());
+                if (!registered) {
+                  GCMRegistrar.register(getApplicationContext(), gSenderID);
+                }
                 result = true;
             } catch (JSONException e) {
                 Log.e(LOG_TAG, "execute: Got JSON Exception " + e.getMessage());
