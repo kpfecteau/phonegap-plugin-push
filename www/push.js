@@ -62,6 +62,26 @@ var PushNotification = function(options) {
     }, 10);
 };
 
+
+/**
+ * Check to see if push notifications are enabled
+ */
+PushNotification.prototype.areNotificationsEnabled = function(successCallback, errorCallback, options) {
+    if (errorCallback == null) { errorCallback = function() {}}
+
+    if (typeof errorCallback != "function")  {
+        console.log("PushNotification.register failure: failure parameter not a function");
+        return
+    }
+
+    if (typeof successCallback != "function") {
+        console.log("PushNotification.register failure: success callback parameter must be a function");
+        return
+    }
+
+    cordova.exec(successCallback, errorCallback, "PushPlugin", "areNotificationsEnabled", [options]);
+};
+
 /**
  * Unregister from push notifications
  */
